@@ -1,7 +1,7 @@
-# ==================================
+#
 # Makefile - main Makefile
 # Created by Matheus Leme Da Silva
-# ==================================
+#
 
 MAKEFLAGS += --no-print-directory
 
@@ -13,10 +13,11 @@ CFLAGS := -Wall -Wextra -O2
 # ===== Directories =====
 BUILD_DIR := build
 BIN_DIR := $(BUILD_DIR)/bin
+OBJ_DIR := $(BUILD_DIR)/obj
 
 # ===== Files =====
 IMAGE := $(OSI_OSNAME).img
-BOOTLOADER_FILE := $(BIN_DIR)/bootloader.elf
+BOOTLOADER_FILE := $(BIN_DIR)/bootloader.bin
 KERNEL_FILE := $(BIN_DIR)/$(KERNEL_IMAGE)
 
 # ==================================
@@ -26,21 +27,17 @@ KERNEL_FILE := $(BIN_DIR)/$(KERNEL_IMAGE)
 all: $(IMAGE)
 
 prepare:
-	@echo "  MKDIR     $(BIN_DIR)"
-	@mkdir -p $(BIN_DIR)
+	@echo "  MKDIR     $(BIN_DIR) $(OBJ_DIR)"
+	@mkdir -p $(BIN_DIR) $(OBJ_DIR)
 
-bootloader:
-	@echo "[ BOOTLOADER ]"
-	@$(MAKE) -C bootloader TARGET=../$(BOOTLOADER_FILE) DEBUG=$(DEBUG)
+compile: prepare
+	@make -C src BOOTLOADER=../$(BOOTLOADER_FILE) \
+		KERNEL=../$(KERNEL_FILE) \
+		OBJD=../$(OBJ_DIR) \
+		BIND=../$(BIN_DIR) \
+		DEBUG=$(DEBUG)
 
-kernel:
-	@echo "[  KERNEL   ]"
-	@mkdir -p kernel/lib/include
-	@#cp -f $(LIBC_FILE) kernel/lib/
-	@#cp -rf libc/include kernel/lib
-	@$(MAKE) -C kernel TARGET=../$(KERNEL_FILE) DEBUG=$(DEBUG)
-
-$(IMAGE): prepare bootloader kernel
+$(IMAGE): prepare compile
 	@echo "[   IMAGE   ] Creating $(IMAGE)"
 	@dd if=/dev/zero of=$(IMAGE) bs=$(FS_SECTOR_SIZE) count=$(FS_TOTAL_SECTORS) status=none
 	@mkfs.fat -F $(FS_FAT_TYPE) -n $(OSI_VOLUME_LABEL) $(IMAGE)
@@ -75,8 +72,11 @@ debug:
 
 clean:
 	@echo "[ CLEANING  ]"
-	@$(MAKE) -C bootloader clean
-	@$(MAKE) -C kernel clean
+	@make -C src clean BOOTLOADER=../$(BOOTLOADER_FILE) \
+		KERNEL=../$(KERNEL_FILE) \
+		OBJD=../$(OBJ_DIR) \
+		BIND=../$(BIN_DIR) \
+		DEBUG../=$(DEBUG)
 	@rm -rf $(BUILD_DIR) $(IMAGE) fat
 
-.PHONY: all clean bootloader kernel prepare libc img run run-ng debug install
+.PHONY: all clean compile prepare img run run-ng debug install

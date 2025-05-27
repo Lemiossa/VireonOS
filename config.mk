@@ -13,7 +13,7 @@ OSI_VOLUME_LABEL := VIREON-OS
 # ===== Filesystem configuration =====
 FS_FAT_TYPE := 16
 FS_SECTOR_SIZE := 512
-FS_TOTAL_SECTORS := 65535 # 32 mb
+FS_TOTAL_SECTORS := 32768
 
 # ===== Virtual machine configuration =====
 MACHINE_MEMORY := 3M

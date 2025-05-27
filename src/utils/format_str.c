@@ -1,0 +1,95 @@
+/*
+* utils/format_str.c
+* Created by Matheus Leme Da Silva
+*/
+#include "types.h"
+#include "utils.h"
+
+void format_str(uchar *fmt, uint *args, void (*putchar)(uchar), bool ansi)
+{
+  uchar digit[32];
+  while(*fmt) {
+    if(*fmt=='%') {
+      uint value, base=0, width=0;
+      int is_negative=0, use_uppercase=0;
+      uchar *s;
+      fmt++;
+      while(*fmt>='0'&&*fmt<='9') {
+        width=width*10+(*fmt-'0');
+        fmt++;
+      }
+      if(*fmt=='d'||*fmt=='i') {
+        value=*args++;
+        base=10;
+        is_negative=(value<0)?1:0;
+        if(is_negative)value=-(int)value;
+      } else if (*fmt=='u') {
+        value=*args++;
+        base=10;
+      } else if (*fmt=='x') {
+        value=*args++;
+        base=16;
+        use_uppercase=0;
+      } else if (*fmt=='X') {
+        value=*args++;
+        base=16;
+        use_uppercase=1;
+      } else if(*fmt=='o') {
+        value=*args++;
+        base=8;
+      } else if(*fmt=='b') {
+        value=*args++;
+        base=2;
+      } else if(*fmt=='s') {
+        s=(uchar*)(*args++);
+        if(!s)s=(uchar*)"(null)";
+        while(*s) {
+          if(*s=='\033'&&ansi) {
+            size_t pos=0;
+            process_ansi_escape((char*)s, &pos);
+            s+=pos+1;
+          } else {
+            (*putchar)(*s++);
+          }
+        }
+      } else if(*fmt=='c') {
+        (*putchar)((uchar)(*args++));
+      } else if(*fmt=='%') {
+        (*putchar)('%');
+      } else {
+        (*putchar)('%');
+        if(*fmt)(*putchar)(*fmt);
+      }
+      if(base) {
+        uint n=0;
+        uint d;
+
+        digit[31]='\0';
+        if(value==0) {
+          digit[30]='0';
+          n=1;
+        } else {
+          do {
+            d=value%base;
+            digit[31-(++n)]=(d<=9)?('0'+d):(use_uppercase?('A'+d-10):('a'+d-10));
+            value/=base;
+          } while(value&&n<15);
+        }
+        while(n<width&&n<31)digit[31-(++n)]='0';
+        if(is_negative&&n<31)digit[31-(++n)]='-';
+        s=&digit[31-n];
+        while(*s)(*putchar)(*s++);
+      }
+      fmt++;
+    } else {
+      if(*fmt=='\033'&&ansi){
+        size_t pos=0;
+        uchar *fmt_start=fmt;
+        process_ansi_escape((char*)fmt, &pos);
+        fmt=fmt_start+pos+1;
+      } else {
+        (*putchar)(*fmt++);
+      }
+    }
+  }
+}
