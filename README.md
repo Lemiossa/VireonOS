@@ -12,6 +12,8 @@ So far, VireonOS already has s few things working:
 - **Basic file system (FAT16) support** - this part was a real headache
 - **Basic Timer**
 - **Basic text management on the screen(VGA)**
+- **Legacy and APM shutdown**
+- **Legacy reboot(triple fault)**
 
 ## Dependencies
 - nasm

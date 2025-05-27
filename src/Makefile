@@ -48,6 +48,7 @@ SRC=\
 		drivers/vga/putc.asm \
 		drivers/vga/putcat.c \
 		drivers/vga/cursor.asm \
+		hardware.asm \
 		kernel.c
 
 OBJ=$(patsubst %.asm,$(OBJD)/%.o,$(patsubst %.c,$(OBJD)/%.o,$(SRC)))

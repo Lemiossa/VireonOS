@@ -75,6 +75,7 @@ void print_sad()
 
 void kmain()
 {
+  int i=0;
   init_vga();
   dettect_disk(bootdrive);
   kprintf("dettected %s\n", disk);
@@ -84,6 +85,13 @@ void kmain()
   set_cursor(0, 1);
 
   enable_cursor();
+
+  for (i=5;i>0;i--) {
+    kprintf("\rshutdown in \033[1;31m%d\033[0m...", i);
+    delay_ms(1000);
+  }
+
+  shutdown();
 
   for(;;);
 }
