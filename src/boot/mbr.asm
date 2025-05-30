@@ -1,246 +1,244 @@
-; ==================================
-; mbr.asm - the main bootloader file
+;
+; mbr.asm
 ; Created by Matheus Leme Da Silva
-; Locate: Brazil
-; ==================================
-
+;
 [BITS 16]
-[ORG 0x0000]
+[ORG 0x7c00]
 
-%define FILE_ADDR	0x0800
-%define FILENAME	'VIRX86     '   ; set this correctly! !ONLY 11 BYTES!
+%define FILE_ADDR			0x0800
+%define FILENAME			'VIRX86     '
 
-global _start
-jmp short _start
+%strlen FILENAMELEN FILENAME
+%if FILENAMELEN != 11
+	%error "FILENAME not have 11 bytes"
+%endif
+
+jmp short main
 nop
 
-OemID							db 'VireonOS'	; OEM identifier. !ONLY 8 BYTES!
-BytesPerSector		dw 512		; for compability
-SectorsPerCluster	db 8
-ReservedSectors		dw 1		; size of bootloader??
-FatCount					db 2		; only 2 copies
-RootEntries				dw 512		; good size
-TotalSectors			dw 32768		; if (TotalSectors > 65535) { TotalSectors = 0; }
-MediaType					db 0xF8		; 0xf8 for hard drives(HDs), 0xf0 for floppy(FDs)
-SectorsPerFat			dw 32		; 0x0080
-SectorsPerTrack		dw 63		; 0x003F
-Heads							dw 16		; 0x00FF
-HiddenSectors			dd 0		; 0x00000000
-LargeSectors			dd 0
-DriveNumber				db 0x80  	; 0x00 - the BIOS set this
-Reserved					db 0		; 0x00
-Signature					db 0x29
-VolID							dd 'EMEL'	; VireonOS created by matheus *LEME* da silva
-VolLabel					db 'VIR-OS     '
-FatType						db 'FAT16   '
+OemID								db 'VireonOS'			; 8 bytes
+BytesPerSector			dw 512						; FOR COMPABILITIE
+SectorsPerCluster		db 8
+ReservedSectors			dw 1
+FatCount						db 2
+RootEntries					dw 512
+TotalSectors				dw 32768
+MediaType						db 0xf8
+SectorsPerFat				dw 32
+SectorsPerTrack			dw 63
+Heads								dw 16
+HiddenSectors				dd 0
+LargeSectors				dd 0
+DriveNumber					db 0x80
+Reserved						db 0
+Signature						db 0x29
+VolID								dd 'EMEL'
+VolLabel						db 'VIR-OS     '			; 11 bytes
+FatType							db 'FAT16   '			; 8 bytes
 
-; end of the header =========================
-; ===========================================
-
-_start:
+main:
+	xor ax, ax
 	cli
-	mov ax, 0x07C0
 	mov ds, ax
 	mov es, ax
-	xor ax, ax
 	mov ss, ax
-	mov sp, 0xFFFF
+	mov sp, 0x7c00
 	sti
 
 	mov [DriveNumber], dl
 
-	; print the main message
 	mov si, BootMSG
 	call PrintString
 
-	; Calculate root directory start
-	movzx ax, byte [FatCount]
-	mul word [SectorsPerFat]	; AX = FATs * SectorsPerFat
-	add ax, [ReservedSectors]	; Add ***ReservedSectors***
+	; calculate start of root dir
+	movzx ax, byte[FatCount]
+	mul word[SectorsPerFat]
+	add ax, [ReservedSectors]
 	mov [RootDirStart], ax
 
-	; Calculate root directory size ***in sectors***
+	; calculate size of root dir
 	mov ax, [RootEntries]
-	mov cx, 32			; bytes per entry
-	mul cx
-	div word [BytesPerSector]
-	test dx, dx
-	jz .no_round
-	inc ax
-
-.no_round:
+	shr ax, 4
 	mov [RootDirSectors], ax
 
-	; calculate de data area start
-	mov cx, ax
 	add ax, [RootDirStart]
 	mov [DataStart], ax
 
-	; Load root dir
+	; load root dir
 	mov ax, [RootDirStart]
 	mov bx, Buffer
+	mov cx, 1
 	call ReadSectors
 
-	; Find the file
-	mov cx, [RootDirStart]
 	mov di, Buffer
+	mov cx, 16
 
-.find_file:
-	cmp byte [di], 0 ; End of Dir?
-	je .not_found
+	.find_file:
+		cmp byte[di], 0 ; valid file?
+		je .not_found
+		cmp byte[di], 0xe5 ; deleted?
+		je .next
 
-	cmp byte [di], 0xE5 ; deleted entry?
-	je .next
+		push di
+		push cx
+		mov si, filename
+		mov cx, 11
+		repe cmpsb
+		pop cx
+		pop di
+		je .found
 
-	mov si, filename ; compare filename
-	push di
-	mov cx, 0x0B
-	repe cmpsb
-	pop di
-	je .found
+	.next:
+		add di, 32
+		loop .find_file
+		inc word[RootDirStart]
+		dec word[RootDirSectors]
+		jnz .load_next_root
 
-.next:
-	add di, 0x20 ; next entry
-	dec word[counter]
-	jnz .find_file
+	.not_found:
+		mov si, FileNotFoundMSG
+		call PrintString
+		jmp Reboot
 
-.not_found:
-	mov si, FileNotFoundMSG
-	call PrintString
-	jmp Reboot
+	.load_next_root:
+		mov ax, [RootDirStart]
+		mov bx, Buffer
+		mov cx, 1
+		call ReadSectors
+		mov di, Buffer
+		mov cx, 16
+		jmp .find_file
 
-.found:
-	; Get first cluster
-	mov ax, [di+0x1A]
-	mov [Cluster], ax
+	.found:
+		mov ax, [di+26] ; first cluster
+		mov [Cluster], ax
 
-	; Load FAT
-	mov ax, [ReservedSectors]
-	mov cx, [SectorsPerFat]
-	mov bx, FatBuffer
-	call ReadSectors
+		; Load FAT
+		mov ax, [ReservedSectors]
+		mov cx, [SectorsPerFat]
+		mov bx, 0x7e00
+		call ReadSectors
 
-	; Set up destination buffer
-	mov ax, FILE_ADDR
-	mov es, ax
-	xor bx, bx
+		; Configure the buffer
+		mov ax, FILE_ADDR
+		mov es, ax
+		xor di, di
 
-.load_loop:
-	mov ax, [Cluster]
-	cmp ax, 0x0002 ; Valid Cluster?
-	jb .done
-	cmp ax, 0xFFF8 ; End of File?
-	jae .done
+	.load_loop:
+		mov ax, [Cluster]
+		cmp ax, 0x0002
+		jb .done
+		cmp ax, 0xfff8
+		jae .done
 
-	; Convert cluster to LBA
-	sub ax, 0x0002
-	movzx cx, byte[SectorsPerCluster]
-	mul cx
-	add ax, [DataStart]
+		; Convert cluster to LBA
+		sub ax, 2
+		movzx cx, byte[SectorsPerCluster]
+		mul cx
+		add ax, [DataStart]
 
-	; Read the cluster
-	push bx
-	movzx cx, byte [SectorsPerCluster]
-	call ReadSectors
-	pop bx
+		; Read the cluster
+		push di
+		push es
+		mov bx, di
+		movzx cx, byte[SectorsPerCluster]
+		call ReadSectors
+		pop es
+		pop di
 
-	; Update buffer position
-	movzx ax, byte[SectorsPerCluster]
-	mul word [BytesPerSector]
-	add bx, ax
+		; Update buffer position
+		movzx ax, byte[SectorsPerCluster]
+		shl ax, 9 ; multiply per 512
+		add di, ax
+		jnc .no_overflow
 
-	jnc .no_adj
+		mov ax, es
+		add ax, 0x100
+		mov es, ax
+		xor di, di
 
-	; Adjust segment if overflow
+	.no_overflow:
+		; Get next cluster
+		mov ax, [Cluster]
+		shl ax, 1
+		add ax, 0x7e00
+		mov si, ax
+		mov ax, [si]
+		mov [Cluster], ax
+		jmp .load_loop
 
-	mov dx, es
-	add dx, 0x1000
-	mov es, dx
-	xor bx, bx
+	.done:
+		push ds
+		pop es
+		mov dl, [DriveNumber]
+		jmp FILE_ADDR:0000
 
-.no_adj:
-	; Get nest cluster
-	mov ax, [Cluster]
-	shl ax, 1 ; Multiply by 2 (FAT16 = 2 bytes per entry)
-	add ax, FatBuffer
-	mov si, ax
-	mov ax, [si]
-	mov [Cluster], ax
-
-	jmp .load_loop
-
-.done:
-	xor dx, dx
-	mov dl, [DriveNumber]
-	jmp FILE_ADDR:0000
-
-
-
-; UTILITY ===================================
-; ===========================================
-
-; Read Sectors FUNCTION
-; @param AX - LBA
-; @param CX - Sectors to read
-; @param ES:BX - Buffer
+; ReadSectors
+; Params:
+;		AX - LBA
+;		CX - Sector count
+;		ES:BX - Buffer
 ReadSectors:
 	pusha
-.read:
 	push cx
 	push ax
 
-	; Convert LBA to CHS
 	xor dx, dx
 	div word [SectorsPerTrack]
-	inc dl ; Sector = (LBA % SPT)+ 1
-	mov cl, dl
-
+	inc dl
+	mov cl, dl ; Sector
 	xor dx, dx
 	div word [Heads]
 	mov dh, dl ; Head
-	mov ch, al ; Cylinder (low 8 Bits)
+	mov ch, al ; Cylinder
 
 	shl ah, 6
 	or cl, ah
 
 	mov dl, [DriveNumber]
-	mov ax, 0x0201 ; read 1 sector
-
+	mov ax, 0x0200
+	add ax, cx ; Number of sectors to read
 	int 0x13
-	jc .error ; if carry != 0; Error
+	jc .error
 
 	pop ax
-	inc ax
-	add bx, [BytesPerSector]
+	add ax, cx
+	mov dx, cx
+	shl dx, 9
+	add bx, dx
+	jnc .no_seg_adjust
 
-	pop cx
-	loop .read
+	mov dx, es
+	add dx, 0x100 ; Increment the segment
+	mov es, dx
+	xor bx, bx
 
-	popa
-	ret
+	.no_seg_adjust:
+		pop cx
+		popa
+		ret
 
-.error:
-	mov si, ErrorMSG
-	call PrintString
-	jmp Reboot
+	.error:
+		mov si, ErrorMSG
+		call PrintString
+		jmp Reboot
 
-
-; Print a string
-; @param ES:SI - string ptr
+; PrintString
+;		ES:SI - Pointer of string
 PrintString:
 	pusha
 	.loop:
 		lodsb
 		test al, al
 		jz .done
-		mov ah, 0x0E
+		mov ah, 0x0e
 		int 0x10
 		jmp .loop
 	.done:
 		popa
-		ret
+ret
 
-; Reboot the system
+; Reboot
 Reboot:
 	mov si, RebMSG
 	call PrintString
@@ -248,29 +246,26 @@ Reboot:
 	int 0x16
 	int 0x19
 
-; DATA ======================================
-; ===========================================
 
-; messages
-BootMSG			db 'Booting...', 0x0D, 0x0A, 0
-ErrorMSG		db 'ERROR!', 0x0D, 0x0A, 0
-FileNotFoundMSG		db 'File not found!', 0x0A, 0x0D, 0
-RebMSG			db 'Press any key to reboot...', 0x0D, 0x0A, 0
+; DATA
 
-; others
-filename		db FILENAME
+; DATA.messages
+	BootMSG							db 'Boot...', 0
+	ErrorMSG						db 'ERROR!', 0
+	FileNotFoundMSG			db 'Not found!', 0
+	RebMSG							db '[...]', 0
+	filename						db FILENAME
 
-RootDirStart		dw 0
-RootDirSectors		dw 0
-DataStart		dw 0
-Cluster			dw 0
-counter			dw 1024
+; DATA.others
+	RootDirStart				dw 0
+	RootDirSectors			dw 0
+	DataStart						dw 0
+	Cluster							dw 0
 
-; END =======================================
-; ===========================================
+; END
 
-TIMES 510 - ($ - $$) db 0
+TIMES 510-($-$$) db 0
 DW 0xAA55
 
 Buffer:
-FatBuffer:
+

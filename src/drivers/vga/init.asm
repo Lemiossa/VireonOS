@@ -8,7 +8,7 @@
 global _init_vga
 
 ; extern
-extern _clear_screen
+extern clear_screen
 
 section .text
 
@@ -33,6 +33,7 @@ _init_vga:
 	mov cx, 0x0607
 	int 0x10
 
-	call _clear_screen
+	mov bh, 0x07
+	call clear_screen
 ret
 

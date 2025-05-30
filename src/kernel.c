@@ -4,15 +4,15 @@
 */
 #include "types.h"
 #include "drivers/vga.h"
+#include "drivers/keyboard.h"
 #include "utils.h"
 
 #define TICK_MS 55 /* for 18.2 hz */
-#define SCREEN_WID 80
-#define SCREEN_HEI 50
 
-char *disk="hd0";
 extern uint ticks;
 extern uchar bootdrive;
+
+#define OPTION_COUNT 3
 
 uint get_ms()
 {
@@ -34,64 +34,17 @@ void halt()
   for (;;);
 }
 
-void dettect_disk(u8 disk_drive)
+void debug(uchar *msg)
 {
-  switch(disk_drive) {
-    case 0x00: {
-      disk="fd0";
-    } break;
-    case 0x01: {
-      disk="fd1";
-    } break;
-    case 0x80: {
-      disk="hd0";
-    } break;
-    case 0x81: {
-      disk="hd1";
-    } break;
-    default: {
-      disk="not identified!";
-    } break;
-  }
-}
-
-void print_sad()
-{
-  int center_x=SCREEN_WID-12;
-  int center_y=SCREEN_HEI-12;
-  disable_cursor();
-  putcat(center_x-3,  center_y-2, ' ', 0xff);
-  putcat(center_x+3,  center_y-2, ' ', 0xff);
-  putcat(center_x-3,  center_y-1, ' ', 0xff);
-  putcat(center_x+3,  center_y-1, ' ', 0xff);
-  putcat(center_x-3,  center_y+4, ' ', 0xff);
-  putcat(center_x-2,  center_y+3, ' ', 0xff);
-  putcat(center_x-1,  center_y+2, ' ', 0xff);
-  putcat(center_x,    center_y+2, ' ', 0xff);
-  putcat(center_x+1,  center_y+2, ' ', 0xff);
-  putcat(center_x+2,  center_y+3, ' ', 0xff);
-  putcat(center_x+3,  center_y+4, ' ', 0xff);
+  kprintf("[%5u] %s", get_ms(), msg);
 }
 
 void kmain()
 {
-  int i=0;
   init_vga();
-  dettect_disk(bootdrive);
-  kprintf("dettected %s\n", disk);
+  debug("initializing disk...\n");
+  kprintf("\tDrive: 0x%2x|0b%8b\n", bootdrive, bootdrive);
+  if(!init_disk(bootdrive)) debug("initialized!\n"); else panic("Failed to initialize disk");
 
-  print_sad();
-
-  set_cursor(0, 1);
-
-  enable_cursor();
-
-  for (i=5;i>0;i--) {
-    kprintf("\rshutdown in \033[1;31m%d\033[0m...", i);
-    delay_ms(1000);
-  }
-
-  shutdown();
-
-  for(;;);
+  halt();
 }

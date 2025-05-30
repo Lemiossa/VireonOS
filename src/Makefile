@@ -29,14 +29,16 @@ else
 	LDFLAGS=-d -s
 endif
 ARFLAGS=r
-CFLAGS=-Dconst= -O -ansi -I./
+CFLAGS=-Dconst= -O -ansi -I. -I./include
 
 # bootloader
 ASFLAGSX86=-f bin
 
 SRC=\
-		entry.asm \
-		runtime.asm \
+		x86/entry.asm \
+		x86/runtime.asm \
+		x86/panic.c \
+		x86/panicx86.asm \
 		utils/format_str.c \
 		utils/kmemcpy.c \
 		utils/console.c \
@@ -48,7 +50,10 @@ SRC=\
 		drivers/vga/putc.asm \
 		drivers/vga/putcat.c \
 		drivers/vga/cursor.asm \
-		hardware.asm \
+		drivers/keyboard/main.asm \
+		drivers/disk/main.asm \
+		drivers/disk/cdecl.asm \
+		x86/hardware.asm \
 		kernel.c
 
 OBJ=$(patsubst %.asm,$(OBJD)/%.o,$(patsubst %.c,$(OBJD)/%.o,$(SRC)))
